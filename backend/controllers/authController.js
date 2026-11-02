@@ -1,3 +1,4 @@
+
 const User = require("../models/User");
 const bcrypt = require("bcrypt");
 const generateToken = require("../utils/generateToken");
@@ -7,7 +8,7 @@ const registerUser = async (req, res) => {
   try {
     const { name, email, password } = req.body;
 
-    // Check all fields
+    // Check required fields
     if (!name || !email || !password) {
       return res.status(400).json({
         message: "All fields are required"
@@ -33,6 +34,7 @@ const registerUser = async (req, res) => {
       password: hashedPassword
     });
 
+    // Send response
     res.status(201).json({
       message: "User registered successfully",
       user: {
@@ -50,59 +52,109 @@ const registerUser = async (req, res) => {
   }
 };
 
-// login user 
+// Login User
+const loginUser = async (req, res) => {
+  try {
+    const { email, password } = req.body;
 
-const loginUser = async (req,res) => {
-  try{
-    const {email,password} = req.body
-
-    // check required field 
-
-    if(!email || !password){
+    // Check required fields
+    if (!email || !password) {
       return res.status(400).json({
-      message:"email and password are required"
-      })
+        message: "Email and password are required"
+      });
     }
-    // find user by email
-    const user = await User.findOne({email})
 
-    if(!user){
+    // Find user by email
+    const user = await User.findOne({ email });
+
+    if (!user) {
       return res.status(401).json({
-        message:"invalid email or password"
-      })
+        message: "Invalid email or password"
+      });
     }
 
-    // compare password
+    // Compare password
     const isPasswordCorrect = await bcrypt.compare(
       password,
       user.password
-    )
+    );
 
-    if(!isPasswordCorrect){
+    if (!isPasswordCorrect) {
       return res.status(401).json({
-        message:"invalid email or password"
-      })
+        message: "Invalid email or password"
+      });
     }
 
-    // generate token 
-    const token = generateToken(user._id)
+    // Generate JWT token
+    const token = generateToken(user._id);
 
-    // send response 
+    // Store token in HTTP-only cookie
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 24 * 60 * 60 * 1000
+    });
+
+    // Send response
     res.status(200).json({
-      message:"login successful",
-      token,
-      user:{
-        id:user._id,
-        name:user.name,
-        email:user.email
+      message: "Login successful",
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email
       }
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      message: "Login failed",
+      error: error.message
+    });
+  }
+};
+
+// Get Logged-in User
+const getMe = async (req, res) => {
+  try {
+    res.status(200).json({
+      message: "User fetched successfully",
+      user: req.user
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      message: "Failed to fetch user",
+      error: error.message
+    });
+  }
+};
+
+// logout user
+const logoutUser = async(req,res) => {
+  try{
+    res.clearCookie("token" ,{
+      httpOnly:true,
+      secure:process.env.NODE_ENV === "production",
+      sameSite:"lax"
+    })
+
+    res.status(200).json({
+      message:"Logout successful"
     })
   }catch(error){
-    res.status(500).json({
-      message:"login failed",
-      error:error.message
-    })
+   res.status(500).json({
+    message:"logout failed",
+    error:error.message
+   })
   }
+  
 }
 
-module.exports = { registerUser };
+// Export controllers
+module.exports = {
+  registerUser,
+  loginUser,
+  getMe,
+  logoutUser
+};
