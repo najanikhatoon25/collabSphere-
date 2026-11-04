@@ -4,6 +4,7 @@ const cookieParser = require("cookie-parser");
 
 const app = express();
 const authRoutes = require("./routes/authRoutes")
+const projectRoutes=require("./routes/projectRoutes")
 
 
 // middleware
@@ -14,6 +15,13 @@ app.use(cors({
 app.use(express.json());
 app.use(cookieParser())
 
+// register user routes 
+app.use("/api/auth",authRoutes)  
+
+// project routes 
+app.use("/api/projects",projectRoutes)
+
+
 // Test route 
 app.get("/",(req,res) => {
     res.status(200).json({
@@ -23,8 +31,6 @@ app.get("/",(req,res) => {
 
 // authetication routes 
 
-// register user routes 
-app.use("/api/auth",authRoutes)  
 
 
 module.exports = app;
