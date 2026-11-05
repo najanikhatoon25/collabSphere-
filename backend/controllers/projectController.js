@@ -1,4 +1,5 @@
 const Project = require("../models/Project");
+const crypto = require("crypto");
 
 // Create Project
 const createProject = async (req, res) => {
@@ -36,7 +37,17 @@ const createProject = async (req, res) => {
 const getMyProjects = async (req, res) => {
   try {
     const projects = await Project.find({
-      owner: req.user._id
+      $or: [
+        { owner: req.user._id },
+        {
+          members: {
+            $elemMatch: {
+              user: req.user._id,
+              status: "accepted"
+            }
+          }
+        }
+      ]
     });
 
     res.status(200).json({
@@ -51,19 +62,27 @@ const getMyProjects = async (req, res) => {
     });
   }
 };
-
-
 // Get Single Project
 const getProjectById = async (req, res) => {
   try {
     const project = await Project.findOne({
       _id: req.params.id,
-      owner: req.user._id
+      $or: [
+        { owner: req.user._id },
+        {
+          members: {
+            $elemMatch: {
+              user: req.user._id,
+              status: "accepted"
+            }
+          }
+        }
+      ]
     });
 
     if (!project) {
       return res.status(404).json({
-        message: "Project not found"
+        message: "Project not found or you don't have access"
       });
     }
 
@@ -79,7 +98,6 @@ const getProjectById = async (req, res) => {
     });
   }
 };
-
 
 // Update Project
 const updateProject = async (req, res) => {
@@ -156,12 +174,11 @@ const deleteProject = async (req, res) => {
 };
 
 
-// Add Member to Project
+// Add Member / Create Invitation
 const addMember = async (req, res) => {
   try {
     const { name, email } = req.body;
 
-    // Validate name and email
     if (
       typeof name !== "string" ||
       !name.trim() ||
@@ -175,16 +192,6 @@ const addMember = async (req, res) => {
 
     const normalizedEmail = email.trim().toLowerCase();
 
-    // Basic email validation
-    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-    if (!emailPattern.test(normalizedEmail)) {
-      return res.status(400).json({
-        message: "Please enter a valid email"
-      });
-    }
-
-    // Find project and verify owner
     const project = await Project.findOne({
       _id: req.params.id,
       owner: req.user._id
@@ -196,34 +203,48 @@ const addMember = async (req, res) => {
       });
     }
 
-    // Check duplicate email
+    if (normalizedEmail === req.user.email.toLowerCase()) {
+      return res.status(400).json({
+        message: "You are already the project owner"
+      });
+    }
+
     const existingMember = project.members.find(
       (member) => member.email === normalizedEmail
     );
 
     if (existingMember) {
       return res.status(400).json({
-        message: "This person is already a project member"
+        message: "Invitation already exists for this email"
       });
     }
 
-    // Add member details
+    const token = crypto.randomBytes(32).toString("hex");
+
+    const tokenHash = crypto
+      .createHash("sha256")
+      .update(token)
+      .digest("hex");
+
     project.members.push({
       name: name.trim(),
       email: normalizedEmail,
-      user: null
+      user: null,
+      status: "pending",
+      inviteTokenHash: tokenHash,
+      inviteExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000)
     });
 
     await project.save();
 
-    res.status(200).json({
-      message: "Member added successfully",
-      project
+    res.status(201).json({
+      message: "Invitation created successfully",
+      invitationToken: token
     });
 
   } catch (error) {
     res.status(500).json({
-      message: "Failed to add member",
+      message: "Failed to create invitation",
       error: error.message
     });
   }
@@ -271,6 +292,72 @@ const removeMember = async (req, res) => {
     });
   }
 };
+
+// accept invitation 
+
+const acceptInvitation = async (req, res) => {
+  try {
+    const { token } = req.body;
+
+    if (!token) {
+      return res.status(400).json({
+        message: "Invitation token is required"
+      });
+    }
+
+    const tokenHash = crypto
+      .createHash("sha256")
+      .update(token)
+      .digest("hex");
+
+    const project = await Project.findById(req.params.id);
+
+    if (!project) {
+      return res.status(404).json({
+        message: "Project not found"
+      });
+    }
+
+    const member = project.members.find(
+      (item) => item.email === req.user.email.toLowerCase()
+    );
+
+    if (!member || member.status !== "pending") {
+      return res.status(400).json({
+        message: "No pending invitation found for your account"
+      });
+    }
+
+    if (member.inviteExpiresAt < new Date()) {
+      return res.status(400).json({
+        message: "Invitation has expired"
+      });
+    }
+
+    if (member.inviteTokenHash !== tokenHash) {
+      return res.status(400).json({
+        message: "Invalid invitation token"
+      });
+    }
+
+    member.user = req.user._id;
+    member.status = "accepted";
+    member.inviteTokenHash = null;
+    member.inviteExpiresAt = null;
+
+    await project.save();
+
+    res.status(200).json({
+      message: "Invitation accepted. You now have project access."
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      message: "Failed to accept invitation",
+      error: error.message
+    });
+  }
+};
 module.exports = {
   createProject,
   getMyProjects,
@@ -278,5 +365,6 @@ module.exports = {
   updateProject,
   deleteProject,
   addMember,
-  removeMember
+  removeMember,
+  acceptInvitation
 };

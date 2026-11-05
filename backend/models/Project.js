@@ -20,8 +20,7 @@ const projectSchema=new mongoose.Schema(
             required:true
 
         },
-
-        members: [
+     members: [
   {
     name: {
       type: String,
@@ -38,11 +37,27 @@ const projectSchema=new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       default: null
+    },
+    status: {
+      type: String,
+      enum: ["pending", "accepted"],
+      default: "pending"
+    },
+    inviteTokenHash: {
+      type: String,
+      default: null
+    },
+    inviteExpiresAt: {
+      type: Date,
+      default: null
     }
   }
-]
+],
     },
-    {timestamps:true}
+        
+        
+        
+        {timestamps:true}
 )
 
 
