@@ -6,6 +6,7 @@ const app = express();
 const authRoutes = require("./routes/authRoutes")
 const projectRoutes=require("./routes/projectRoutes")
 const noteRoutes = require("./routes/noteRoutes");
+const fileRoutes = require("./routes/fileRoutes");
 
 
 // middleware
@@ -24,6 +25,10 @@ app.use("/api/projects",projectRoutes)
 
 // notes route
 app.use("/api", noteRoutes);
+
+// file route
+app.use("/api",fileRoutes)
+
 
 // Test route 
 app.get("/",(req,res) => {
