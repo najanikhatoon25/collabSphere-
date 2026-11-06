@@ -5,6 +5,7 @@ const cookieParser = require("cookie-parser");
 const app = express();
 const authRoutes = require("./routes/authRoutes")
 const projectRoutes=require("./routes/projectRoutes")
+const noteRoutes = require("./routes/noteRoutes");
 
 
 // middleware
@@ -21,6 +22,8 @@ app.use("/api/auth",authRoutes)
 // project routes 
 app.use("/api/projects",projectRoutes)
 
+// notes route
+app.use("/api", noteRoutes);
 
 // Test route 
 app.get("/",(req,res) => {
