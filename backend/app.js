@@ -7,6 +7,7 @@ const authRoutes = require("./routes/authRoutes")
 const projectRoutes=require("./routes/projectRoutes")
 const noteRoutes = require("./routes/noteRoutes");
 const fileRoutes = require("./routes/fileRoutes");
+const aiRoutes = require("./routes/aiRoutes");
 
 
 // middleware
@@ -29,6 +30,8 @@ app.use("/api", noteRoutes);
 // file route
 app.use("/api",fileRoutes)
 
+// geminii ai route
+app.use("/api/ai", aiRoutes);
 
 // Test route 
 app.get("/",(req,res) => {
@@ -37,7 +40,6 @@ app.get("/",(req,res) => {
     })
 })
 
-// authetication routes 
 
 
 

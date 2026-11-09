@@ -158,7 +158,7 @@ const getFileById = async (req, res) => {
 const deleteFile = async (req, res) => {
   try {
     const { projectId, fileId } = req.params;
-
+  
     const project = await Project.findById(projectId);
 
     if (!project) {
@@ -184,11 +184,9 @@ const deleteFile = async (req, res) => {
       });
     }
 
-    const isOwner =
-      project.owner.toString() === req.user._id.toString();
+    const isOwner =project.owner.toString() === req.user._id.toString();
 
-    const isUploader =
-      file.uploadedBy.toString() === req.user._id.toString();
+    const isUploader =file.uploadedBy.toString() === req.user._id.toString();
 
     if (!isOwner && !isUploader) {
       return res.status(403).json({
