@@ -10,6 +10,7 @@ const fileRoutes = require("./routes/fileRoutes");
 const aiRoutes = require("./routes/aiRoutes");
 
 
+
 // middleware
 app.use(cors({
     origin:"http://localhost:5173",
@@ -32,6 +33,8 @@ app.use("/api",fileRoutes)
 
 // geminii ai route
 app.use("/api/ai", aiRoutes);
+
+
 
 // Test route 
 app.get("/",(req,res) => {

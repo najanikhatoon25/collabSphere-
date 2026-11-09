@@ -1,8 +1,6 @@
 const express = require("express");
 const router = express.Router();
 
-const protect = require("../middleware/authMiddleware");
-
 const {
   explainContent,
   generateReadme,
@@ -10,7 +8,19 @@ const {
   explainRepository
 } = require("../controllers/aiController");
 
+// Correct import
+const protect = require("../middleware/authMiddleware");
+
+// Explain content
 router.post("/explain", protect, explainContent);
-router.post("/generate-readme", protect,generateReadme);
+
+// Generate README
+router.post("/generate-readme", protect, generateReadme);
+
+// Review code snippet
+router.post("/review-code", protect, reviewCode);
+
+// Explain GitHub repository
 router.post("/explain-repository", protect, explainRepository);
+
 module.exports = router;

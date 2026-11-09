@@ -56,4 +56,6 @@ const getRepositoryFileContents = async (repositoryUrl) => {
   };
 };
 
-module.exports = { getRepositoryFileContents };
+module.exports = {
+  getRepositoryFileContents
+};
