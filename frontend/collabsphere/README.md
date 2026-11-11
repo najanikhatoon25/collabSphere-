@@ -1,16 +1,40 @@
-# React + Vite
+# CollabSphere frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React and Vite frontend for the existing CollabSphere API.
 
-Currently, two official plugins are available:
+## Run locally
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+1. Start the backend on port `5000`.
+2. From this folder, install the declared frontend dependencies:
 
-## React Compiler
+   ```sh
+   npm install
+   ```
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+3. Start the Vite development server:
 
-## Expanding the ESLint configuration
+   ```sh
+   npm run dev
+   ```
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+The backend currently allows credentialed requests from `http://localhost:5173`.
+The shared API client uses `http://localhost:5000/api` by default. To use a
+different API base, create a local `.env` file in this folder:
+
+```env
+VITE_API_URL=http://localhost:5000/api
+```
+
+Keep `/api` in the configured URL. API requests include browser credentials so
+the backend can set and receive its HttpOnly authentication cookie. The
+frontend does not read or store the authentication token.
+
+## Available scripts
+
+- `npm run dev` starts the local development server.
+- `npm run build` creates the production build in `dist/`.
+- `npm run lint` checks the frontend with ESLint.
+
+Registration currently depends on a backend fix: the registration controller
+returns a server error after creating the account. The frontend shows the API
+error and does not report a successful registration.

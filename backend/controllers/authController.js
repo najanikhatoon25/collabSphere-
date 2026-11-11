@@ -1,4 +1,3 @@
-
 const User = require("../models/User");
 const bcrypt = require("bcrypt");
 const generateToken = require("../utils/generateToken");
@@ -34,7 +33,7 @@ const registerUser = async (req, res) => {
       password: hashedPassword
     });
 
-    // Send response
+    return res.response()
     res.status(201).json({
       message: "User registered successfully",
       user: {
@@ -43,6 +42,7 @@ const registerUser = async (req, res) => {
         email: user.email
       }
     });
+
 
   } catch (error) {
     res.status(500).json({
