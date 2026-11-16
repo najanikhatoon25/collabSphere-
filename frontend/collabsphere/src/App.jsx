@@ -44,6 +44,18 @@ function ProtectedRoutes() {
     return <Navigate to="/login" replace state={{ from: location }} />;
   }
 
+  if (user.inviteSession) {
+    const requestedProject = new URLSearchParams(location.search).get("project");
+    const canOpenInviteRoute =
+      location.pathname === "/ai-tools" ||
+      location.pathname === `/projects/${user.projectId}` ||
+      (location.pathname === "/notes" && requestedProject === user.projectId);
+
+    if (!canOpenInviteRoute) {
+      return <Navigate to={`/projects/${user.projectId}`} replace />;
+    }
+  }
+
   return <Outlet />;
 }
 
@@ -65,6 +77,7 @@ function AppRoutes() {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
       </Route>
+      <Route path="/invitations" element={<SharedProjects />} />
 
       <Route element={<ProtectedRoutes />}>
         <Route element={<DashboardLayout />}>
@@ -73,7 +86,6 @@ function AppRoutes() {
           <Route path="/projects/:projectId" element={<ProjectDetails />} />
           <Route path="/notes" element={<NotesPage />} />
           <Route path="/ai-tools" element={<AITools />} />
-          <Route path="/invitations" element={<SharedProjects />} />
           <Route path="/account" element={<Account />} />
         </Route>
       </Route>

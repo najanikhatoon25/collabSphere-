@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import {
   ArrowDownToLine,
   FilePlus2,
-  Link2,
   Save,
   Trash2,
   UsersRound,
@@ -41,7 +40,6 @@ function ProjectDetails() {
   const [description, setDescription] = useState("");
   const [memberName, setMemberName] = useState("");
   const [memberEmail, setMemberEmail] = useState("");
-  const [invitationToken, setInvitationToken] = useState("");
   const [selectedFile, setSelectedFile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -100,6 +98,22 @@ function ProjectDetails() {
   const currentUserId = user?._id || user?.id;
   const isOwner = ownerId === currentUserId;
 
+  useEffect(() => {
+    if (!isOwner) return undefined;
+
+    const refreshProject = async () => {
+      try {
+        const data = await getProject(projectId);
+        setProject(data.project);
+      } catch (requestError) {
+        setError(requestError.message || "Unable to refresh team status.");
+      }
+    };
+
+    const intervalId = window.setInterval(refreshProject, 5000);
+    return () => window.clearInterval(intervalId);
+  }, [projectId, isOwner]);
+
   const handleUpdate = async (event) => {
     event.preventDefault();
     setSaving(true);
@@ -121,16 +135,17 @@ function ProjectDetails() {
     setSaving(true);
     setError("");
     setMessage("");
-    setInvitationToken("");
     try {
       const data = await inviteMember(projectId, {
         name: memberName,
         email: memberEmail,
       });
+      if (data.emailSent !== true) {
+        throw new Error("The invitation email was not confirmed as sent.");
+      }
       setMemberName("");
       setMemberEmail("");
-      setInvitationToken(data.invitationToken);
-      setMessage(data.message || "Invitation created.");
+      setMessage(data.message || "Invitation email sent.");
       await loadProject();
     } catch (requestError) {
       setError(requestError.message || "Unable to create the invitation.");
@@ -311,17 +326,8 @@ function ProjectDetails() {
                 <span>Email address</span>
                 <input type="email" value={memberEmail} onChange={(event) => setMemberEmail(event.target.value)} required />
               </label>
-              <button className="button button-primary" disabled={saving}>{saving ? "Creating..." : "Create invitation"}</button>
-              <p className="field-hint">The backend returns an invitation token. Share it and this project ID with the teammate; no email is sent by this API.</p>
-              {invitationToken && (
-                <div className="token-box">
-                  <strong>Invitation token</strong>
-                  <code>{invitationToken}</code>
-                  <Link to="/invitations" state={{ projectId: project._id, token: invitationToken }}>
-                    <Link2 size={15} /> Invitation acceptance details
-                  </Link>
-                </div>
-              )}
+              <button className="button button-primary" disabled={saving}>{saving ? "Sending..." : "Send invitation"}</button>
+              <p className="field-hint">An invitation link will be emailed after the email service confirms delivery.</p>
             </form>
           )}
         </section>
@@ -350,9 +356,7 @@ function ProjectDetails() {
           {files.length ? (
             <div className="file-list">
               {files.map((file) => {
-                const uploaderId =
-                  typeof file.uploadedBy === "string" ? file.uploadedBy : file.uploadedBy?._id;
-                const canDeleteFile = isOwner || uploaderId === currentUserId;
+                const canDeleteFile = isOwner;
                 return (
                   <div className="file-row" key={file._id}>
                     <div className="file-badge">{file.originalName.split(".").pop()?.toUpperCase()}</div>

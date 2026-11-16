@@ -1,6 +1,29 @@
 const Note = require("../models/Note");
 const Project = require("../models/Project");
 
+const hasProjectAccess = (project, req) => {
+  if (req.inviteSession) {
+    return (
+      req.inviteSession.projectId === project._id.toString() &&
+      project.members.some(
+        (member) =>
+          member._id.toString() === req.inviteSession.memberId &&
+          member.status === "accepted"
+      )
+    );
+  }
+
+  const isOwner = project.owner.toString() === req.user._id.toString();
+  const isMember = project.members.some(
+    (member) =>
+      member.user &&
+      member.user.toString() === req.user._id.toString() &&
+      member.status === "accepted"
+  );
+
+  return isOwner || isMember;
+};
+
 // Create a new note
 const createNote = async (req, res) => {
   try {
@@ -21,16 +44,7 @@ const createNote = async (req, res) => {
       });
     }
 
-    const isOwner = project.owner.toString() === req.user._id.toString();
-
-    const isMember = project.members.some(
-      (member) =>
-        member.user &&
-        member.user.toString() === req.user._id.toString() &&
-        member.status === "accepted"
-    );
-
-    if (!isOwner && !isMember) {
+    if (!hasProjectAccess(project, req)) {
       return res.status(403).json({
         message: "You are not allowed to access this project"
       });
@@ -68,19 +82,7 @@ const getAllNotes = async (req, res) => {
       });
     }
 
-    // Check project owner
-    const isOwner =
-      project.owner.toString() === req.user._id.toString();
-
-    // Check accepted member
-    const isMember = project.members.some(
-      (member) =>
-        member.user &&
-        member.user.toString() === req.user._id.toString() &&
-        member.status === "accepted"
-    );
-
-    if (!isOwner && !isMember) {
+    if (!hasProjectAccess(project, req)) {
       return res.status(403).json({
         message: "You are not allowed to access this project"
       });
@@ -117,19 +119,7 @@ const getNoteById = async (req, res) => {
       });
     }
 
-    // Check project owner
-    const isOwner =
-      project.owner.toString() === req.user._id.toString();
-
-    // Check accepted member
-    const isMember = project.members.some(
-      (member) =>
-        member.user &&
-        member.user.toString() === req.user._id.toString() &&
-        member.status === "accepted"
-    );
-
-    if (!isOwner && !isMember) {
+    if (!hasProjectAccess(project, req)) {
       return res.status(403).json({
         message: "You are not allowed to access this project"
       });
@@ -174,19 +164,7 @@ const updateNote = async (req, res) => {
       });
     }
 
-    // Check project owner
-    const isOwner =
-      project.owner.toString() === req.user._id.toString();
-
-    // Check accepted member
-    const isMember = project.members.some(
-      (member) =>
-        member.user &&
-        member.user.toString() === req.user._id.toString() &&
-        member.status === "accepted"
-    );
-
-    if (!isOwner && !isMember) {
+    if (!hasProjectAccess(project, req)) {
       return res.status(403).json({
         message: "You are not allowed to access this project"
       });
@@ -245,6 +223,12 @@ const deleteNote = async (req, res) => {
   try {
     const { projectId, noteId } = req.params;
 
+    if (req.inviteSession) {
+      return res.status(403).json({
+        message: "Invited members cannot delete notes"
+      });
+    }
+
     // Find project
     const project = await Project.findById(projectId);
 
@@ -254,23 +238,13 @@ const deleteNote = async (req, res) => {
       });
     }
 
-    // Check project owner
-    const isOwner =
-      project.owner.toString() === req.user._id.toString();
-
-    // Check accepted member
-    const isMember = project.members.some(
-      (member) =>
-        member.user &&
-        member.user.toString() === req.user._id.toString() &&
-        member.status === "accepted"
-    );
-
-    if (!isOwner && !isMember) {
+    if (!hasProjectAccess(project, req)) {
       return res.status(403).json({
         message: "You are not allowed to access this project"
       });
     }
+
+    const isOwner = project.owner.toString() === req.user._id.toString();
 
     // Find note inside this project
     const note = await Note.findOne({

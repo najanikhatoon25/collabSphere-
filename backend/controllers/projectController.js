@@ -1,5 +1,15 @@
 const Project = require("../models/Project");
 const crypto = require("crypto");
+const jwt = require("jsonwebtoken");
+const { sendInvitationEmail } = require("../services/emailService");
+
+const hideInvitationSecrets = (project) => {
+  const projectData = project.toObject();
+  projectData.members = projectData.members.map(
+    ({ inviteTokenHash, inviteExpiresAt, ...member }) => member
+  );
+  return projectData;
+};
 
 // Create Project
 const createProject = async (req, res) => {
@@ -36,6 +46,19 @@ const createProject = async (req, res) => {
 // Get All Projects
 const getMyProjects = async (req, res) => {
   try {
+    if (req.inviteSession) {
+      const project = await Project.findById(req.inviteSession.projectId);
+
+      if (!project) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+
+      return res.status(200).json({
+        message: "Projects fetched successfully",
+        projects: [hideInvitationSecrets(project)]
+      });
+    }
+
     const projects = await Project.find({
       $or: [
         { owner: req.user._id },
@@ -65,20 +88,24 @@ const getMyProjects = async (req, res) => {
 // Get Single Project
 const getProjectById = async (req, res) => {
   try {
-    const project = await Project.findOne({
-      _id: req.params.id,
-      $or: [
-        { owner: req.user._id },
-        {
-          members: {
-            $elemMatch: {
-              user: req.user._id,
-              status: "accepted"
+    const project = req.inviteSession
+      ? req.inviteSession.projectId === req.params.id
+        ? await Project.findById(req.params.id)
+        : null
+      : await Project.findOne({
+          _id: req.params.id,
+          $or: [
+            { owner: req.user._id },
+            {
+              members: {
+                $elemMatch: {
+                  user: req.user._id,
+                  status: "accepted"
+                }
+              }
             }
-          }
-        }
-      ]
-    });
+          ]
+        });
 
     if (!project) {
       return res.status(404).json({
@@ -88,7 +115,7 @@ const getProjectById = async (req, res) => {
 
     res.status(200).json({
       message: "Project fetched successfully",
-      project
+      project: req.inviteSession ? hideInvitationSecrets(project) : project
     });
 
   } catch (error) {
@@ -237,10 +264,28 @@ const addMember = async (req, res) => {
 
     await project.save();
 
-    res.status(201).json({
-      message: "Invitation created successfully",
-      invitationToken: token
-    });
+    try {
+      const inviteLink = await sendInvitationEmail({
+        to: normalizedEmail,
+        projectName: project.name,
+        projectId: project._id.toString(),
+        token
+      });
+
+      return res.status(201).json({
+        message: "Invitation created successfully",
+        emailSent: true
+      });
+    } catch (emailError) {
+      project.members = project.members.filter((member) => member.email !== normalizedEmail);
+      await project.save();
+
+      return res.status(503).json({
+        message: emailError.code === "EMAIL_NOT_CONFIGURED"
+          ? emailError.message
+          : "Invitation email could not be delivered. Check the SMTP settings and try again."
+      });
+    }
 
   } catch (error) {
     res.status(500).json({
@@ -293,66 +338,124 @@ const removeMember = async (req, res) => {
   }
 };
 
-// accept invitation 
+const findPendingInvitation = async (projectId, token) => {
+  if (typeof token !== "string" || !token) {
+    return null;
+  }
 
+  const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+  const project = await Project.findById(projectId);
+
+  if (!project) {
+    return null;
+  }
+
+  const member = project.members.find(
+    (item) => item.inviteTokenHash === tokenHash && item.status === "pending"
+  );
+
+  if (!member || !member.inviteExpiresAt || member.inviteExpiresAt < new Date()) {
+    return null;
+  }
+
+  return { project, member };
+};
+
+const previewInvitation = async (req, res) => {
+  try {
+    const invitation = await findPendingInvitation(req.params.id, req.body.token);
+
+    if (!invitation) {
+      return res.status(400).json({
+        message: "This invitation is invalid, expired, or already accepted."
+      });
+    }
+
+    return res.status(200).json({
+      project: {
+        id: invitation.project._id,
+        name: invitation.project.name
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Unable to verify this invitation."
+    });
+  }
+};
+
+// Accept an invitation using its bearer token.
 const acceptInvitation = async (req, res) => {
   try {
     const { token } = req.body;
 
-    if (!token) {
+    const invitation = await findPendingInvitation(req.params.id, token);
+
+    if (!invitation) {
       return res.status(400).json({
-        message: "Invitation token is required"
+        message: "This invitation is invalid, expired, or already accepted."
       });
     }
 
-    const tokenHash = crypto
-      .createHash("sha256")
-      .update(token)
-      .digest("hex");
-
-    const project = await Project.findById(req.params.id);
-
-    if (!project) {
-      return res.status(404).json({
-        message: "Project not found"
-      });
-    }
-
-    const member = project.members.find(
-      (item) => item.email === req.user.email.toLowerCase()
+    const { project, member } = invitation;
+    const inviteSessionToken = jwt.sign(
+      {
+        type: "project-invite",
+        projectId: project._id.toString(),
+        memberId: member._id.toString()
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "8h" }
+    );
+    const now = new Date();
+    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+    const updateResult = await Project.updateOne(
+      {
+        _id: project._id,
+        members: {
+          $elemMatch: {
+            _id: member._id,
+            inviteTokenHash: tokenHash,
+            status: "pending",
+            inviteExpiresAt: { $gt: now }
+          }
+        }
+      },
+      {
+        $set: {
+          "members.$.user": null,
+          "members.$.status": "accepted",
+          "members.$.inviteTokenHash": null,
+          "members.$.inviteExpiresAt": null
+        }
+      }
     );
 
-    if (!member || member.status !== "pending") {
+    if (updateResult.modifiedCount !== 1) {
       return res.status(400).json({
-        message: "No pending invitation found for your account"
+        message: "This invitation is invalid, expired, or already accepted."
       });
     }
 
-    if (member.inviteExpiresAt < new Date()) {
-      return res.status(400).json({
-        message: "Invitation has expired"
-      });
-    }
+    res.clearCookie("token", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax"
+    });
+    res.cookie("inviteSession", inviteSessionToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 8 * 60 * 60 * 1000
+    });
 
-    if (member.inviteTokenHash !== tokenHash) {
-      return res.status(400).json({
-        message: "Invalid invitation token"
-      });
-    }
-
-    member.user = req.user._id;
-    member.status = "accepted";
-    member.inviteTokenHash = null;
-    member.inviteExpiresAt = null;
-
-    await project.save();
-
-    res.status(200).json({
-      message: "Invitation accepted. You now have project access."
+    return res.status(200).json({
+      message: "Invitation accepted. You now have project access.",
+      projectId: project._id
     });
 
   } catch (error) {
-    res.status(500).json({
+    return res.status(500).json({
       message: "Failed to accept invitation",
       error: error.message
     });
@@ -366,5 +469,6 @@ module.exports = {
   deleteProject,
   addMember,
   removeMember,
+  previewInvitation,
   acceptInvitation
 };

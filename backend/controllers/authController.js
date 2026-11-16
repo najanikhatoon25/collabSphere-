@@ -33,8 +33,7 @@ const registerUser = async (req, res) => {
       password: hashedPassword
     });
 
-    return res.response()
-    res.status(201).json({
+    return res.status(201).json({
       message: "User registered successfully",
       user: {
         id: user._id,
@@ -95,6 +94,11 @@ const loginUser = async (req, res) => {
       sameSite: "lax",
       maxAge: 24 * 60 * 60 * 1000
     });
+    res.clearCookie("inviteSession", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax"
+    });
 
     // Send response
     res.status(200).json({
@@ -138,6 +142,11 @@ const logoutUser = async(req,res) => {
       secure:process.env.NODE_ENV === "production",
       sameSite:"lax"
     })
+    res.clearCookie("inviteSession", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax"
+    });
 
     res.status(200).json({
       message:"Logout successful"

@@ -9,6 +9,7 @@ const {
   deleteProject,
   addMember,
   removeMember,
+  previewInvitation,
   acceptInvitation
 } = require("../controllers/projectController");
 const protect = require("../middleware/authMiddleware")
@@ -28,6 +29,7 @@ router.delete("/:id", protect, deleteProject);
 router.post("/:id/members", protect, addMember);
 // remove member
 router.delete("/:id/members/:memberId", protect, removeMember);
-// accept invitation routes 
-router.post("/:id/accept-invitation", protect, acceptInvitation);
-module.exports = router
+// Invitation details and acceptance use the bearer invitation token.
+router.post("/:id/invitation-preview", previewInvitation);
+router.post("/:id/accept-invitation", acceptInvitation);
+module.exports = router;

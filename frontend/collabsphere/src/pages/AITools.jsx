@@ -4,27 +4,23 @@ import {
   Bot,
   FileText,
   Code2,
-  Lightbulb,
   LoaderCircle,
   Sparkles,
 } from "lucide-react";
 import {
-  explainContent,
   explainRepository,
   generateReadme,
   reviewCode,
 } from "../services/aiService";
 
 const tools = [
-  { id: "explain", title: "Explain content", description: "Get a clear explanation of code or technical text.", icon: Lightbulb },
-  { id: "review", title: "Review code", description: "Explore logic, potential issues, and improvements.", icon: Bot },
-  { id: "repository", title: "Explain a repository", description: "Analyze a public GitHub repository structure.", icon: Code2 },
-  { id: "readme", title: "Generate a README", description: "Draft project documentation from your details.", icon: FileText },
+  { id: "review", title: "AI Code Review", description: "Explore logic, potential issues, and improvements.", icon: Bot },
+  { id: "repository", title: "Repository Explainer", description: "Analyze a public GitHub repository structure.", icon: Code2 },
+  { id: "readme", title: "Generate README", description: "Draft project documentation from your details.", icon: FileText },
 ];
 
 function AITools() {
-  const [activeTool, setActiveTool] = useState("explain");
-  const [content, setContent] = useState("");
+  const [activeTool, setActiveTool] = useState("review");
   const [code, setCode] = useState("");
   const [language, setLanguage] = useState("");
   const [repositoryUrl, setRepositoryUrl] = useState("");
@@ -58,10 +54,7 @@ function AITools() {
     setLoading(true);
 
     try {
-      if (activeTool === "explain") {
-        const data = await explainContent(content);
-        setResult({ title: "Explanation", text: data.explanation });
-      } else if (activeTool === "review") {
+      if (activeTool === "review") {
         const data = await reviewCode(code, language);
         setResult({ title: "Code review", text: data.review });
       } else if (activeTool === "repository") {
@@ -119,13 +112,6 @@ function AITools() {
           </div>
 
           <form className="form-stack" onSubmit={handleSubmit}>
-            {activeTool === "explain" && (
-              <label className="field">
-                <span>Content to explain</span>
-                <textarea rows={9} value={content} onChange={(event) => setContent(event.target.value)} placeholder="Paste code or technical content" required />
-              </label>
-            )}
-
             {activeTool === "review" && (
               <>
                 <label className="field">

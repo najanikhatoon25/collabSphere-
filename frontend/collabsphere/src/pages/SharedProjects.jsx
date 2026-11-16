@@ -1,30 +1,65 @@
-import { useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
 import { CheckCircle2, KeyRound } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../hooks/useAuth";
+import { apiRequest } from "../services/api";
+import { getCurrentUser } from "../services/authService";
 import { acceptInvitation } from "../services/projectService";
 
-function SharedProjects() {
-  const location = useLocation();
-  const navigate = useNavigate();
-  const [projectId, setProjectId] = useState(location.state?.projectId || "");
-  const [token, setToken] = useState(location.state?.token || "");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+const readInvitationLink = () => {
+  const params = new URLSearchParams(window.location.hash.slice(1));
+  return {
+    projectId: params.get("projectId") || "",
+    token: params.get("token") || "",
+  };
+};
 
-  const handleAccept = async (event) => {
-    event.preventDefault();
+function SharedProjects() {
+  const navigate = useNavigate();
+  const { setUser } = useAuth();
+  const [invitation] = useState(readInvitationLink);
+  const [projectName, setProjectName] = useState("");
+  const [error, setError] = useState(() =>
+    invitation.projectId && invitation.token
+      ? ""
+      : "This invitation link is incomplete or invalid."
+  );
+  const [loading, setLoading] = useState(
+    Boolean(invitation.projectId && invitation.token)
+  );
+  const [accepting, setAccepting] = useState(false);
+
+  useEffect(() => {
+    window.history.replaceState(null, "", window.location.pathname + window.location.search);
+
+    if (!invitation.projectId || !invitation.token) {
+      return;
+    }
+
+    apiRequest(`/projects/${invitation.projectId}/invitation-preview`, {
+      method: "POST",
+      body: JSON.stringify({ token: invitation.token }),
+    })
+      .then((data) => setProjectName(data.project.name))
+      .catch((requestError) => {
+        setError(requestError.message || "Unable to verify this invitation.");
+      })
+      .finally(() => setLoading(false));
+  }, [invitation]);
+
+  const handleAccept = async () => {
     setError("");
-    setLoading(true);
+    setAccepting(true);
+
     try {
-      await acceptInvitation(projectId.trim(), token.trim());
-      navigate(`/projects/${projectId.trim()}`, {
-        replace: true,
-        state: { invitationAccepted: true },
-      });
+      await acceptInvitation(invitation.projectId, invitation.token);
+      const session = await getCurrentUser();
+      setUser(session.user);
+      navigate(`/projects/${invitation.projectId}`, { replace: true });
     } catch (requestError) {
       setError(requestError.message || "Unable to accept this invitation.");
     } finally {
-      setLoading(false);
+      setAccepting(false);
     }
   };
 
@@ -33,8 +68,8 @@ function SharedProjects() {
       <section className="page-heading">
         <div>
           <span className="eyebrow">TEAM ACCESS</span>
-          <h1>Accept an invitation</h1>
-          <p>Use the project ID and invitation token shared by the project owner.</p>
+          <h1>Project invitation</h1>
+          <p>Accept this invitation to open the shared project.</p>
         </div>
       </section>
 
@@ -42,27 +77,17 @@ function SharedProjects() {
         <div className="card-heading">
           <span className="card-heading-icon"><KeyRound size={19} /></span>
           <div>
-            <h2>Join a project</h2>
-            <p>Sign in with the email address the owner invited.</p>
+            <h2>{loading ? "Checking invitation..." : projectName || "Invitation unavailable"}</h2>
+            <p>No account or login is required for this invitation.</p>
           </div>
         </div>
-        <form className="form-stack" onSubmit={handleAccept}>
-          <label className="field">
-            <span>Project ID</span>
-            <input value={projectId} onChange={(event) => setProjectId(event.target.value)} required />
-          </label>
-          <label className="field">
-            <span>Invitation token</span>
-            <textarea rows={3} value={token} onChange={(event) => setToken(event.target.value)} required />
-          </label>
-          {error && <p className="form-error" role="alert">{error}</p>}
-          <button className="button button-primary" disabled={loading}>
-            <CheckCircle2 size={17} /> {loading ? "Accepting..." : "Accept invitation"}
+        {error && <p className="form-error" role="alert">{error}</p>}
+        {!loading && projectName && (
+          <button className="button button-primary" onClick={handleAccept} disabled={accepting}>
+            <CheckCircle2 size={17} /> {accepting ? "Accepting..." : "Accept invitation"}
           </button>
-        </form>
+        )}
       </section>
-      <p className="muted-copy">Invitations are created by a project owner. The backend does not send invitation emails or provide a list of pending invitations.</p>
-      <Link to="/projects" className="text-link">Back to projects</Link>
     </div>
   );
 }

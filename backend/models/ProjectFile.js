@@ -8,13 +8,32 @@ const projectFileSchema = new mongoose.Schema(
     },
 
     fileName: {
-      type: String,
-      required: true
+      type: String
     },
 
     filePath: {
+      type: String
+    },
+
+    cloudinaryPublicId: {
       type: String,
-      required: true
+      required: function () {
+        return !this.filePath;
+      }
+    },
+
+    cloudinarySecureUrl: {
+      type: String,
+      required: function () {
+        return !this.filePath;
+      }
+    },
+
+    cloudinaryResourceType: {
+      type: String,
+      required: function () {
+        return !this.filePath;
+      }
     },
 
     mimeType: {

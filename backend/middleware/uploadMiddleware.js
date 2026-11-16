@@ -1,30 +1,6 @@
 const multer = require("multer");
-const path = require("path");
-const fs = require("fs");
-const crypto = require("crypto");
 
-// Upload folder ka path
-const uploadDir = path.join(__dirname, "../uploads");
-
-// Folder nahi hai toh create karo
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
-
-// File storage configuration
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadDir);
-  },
-
-  filename: (req, file, cb) => {
-    const uniqueName =
-      Date.now() + "-" + crypto.randomBytes(6).toString("hex") +
-      path.extname(file.originalname);
-
-    cb(null, uniqueName);
-  }
-});
+const storage = multer.memoryStorage();
 
 // Allowed file types
 const fileFilter = (req, file, cb) => {

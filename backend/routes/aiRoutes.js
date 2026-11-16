@@ -9,7 +9,7 @@ const {
 } = require("../controllers/aiController");
 
 // Correct import
-const protect = require("../middleware/authMiddleware");
+const protect = require("../middleware/authMiddleware.js");
 
 // Explain content
 router.post("/explain", protect, explainContent);

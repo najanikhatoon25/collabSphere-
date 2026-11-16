@@ -3,9 +3,26 @@ const path=require("path")
 
 const Project=require("../models/Project")
 const ProjectFile=require("../models/ProjectFile")
+const {
+  uploadBuffer,
+  deleteAsset,
+  downloadAsset,
+} = require("../services/cloudinaryService")
 
 // user is project owner or accepted member
-const checkProjectAccess =(project,userId) =>{
+const checkProjectAccess =(project,req) =>{
+    if (req.inviteSession) {
+        return (
+            req.inviteSession.projectId === project._id.toString() &&
+            project.members.some(
+                (member) =>
+                    member._id.toString() === req.inviteSession.memberId &&
+                    member.status === "accepted"
+            )
+        )
+    }
+
+    const userId = req.user._id;
     const isOwner=project.owner.toString()===userId.toString()
 
 const isMember = project.members.some(
@@ -32,46 +49,57 @@ const uploadFile = async (req, res) => {
     const project = await Project.findById(projectId);
 
     if (!project) {
-      fs.unlinkSync(req.file.path);
-
       return res.status(404).json({
         message: "Project not found"
       });
     }
 
-    if (!checkProjectAccess(project, req.user._id)) {
-      fs.unlinkSync(req.file.path);
-
+    if (!checkProjectAccess(project, req)) {
       return res.status(403).json({
         message: "You are not allowed to access this project"
       });
     }
 
-    const file = await ProjectFile.create({
-      originalName: req.file.originalname,
-      fileName: req.file.filename,
-      filePath: req.file.path,
-      mimeType: req.file.mimetype,
-      size: req.file.size,
-      project: projectId,
-      uploadedBy: req.user._id
-    });
+    const uploadedAsset = await uploadBuffer(req.file.buffer);
 
-    res.status(201).json({
+    let file;
+    try {
+      file = await ProjectFile.create({
+        originalName: req.file.originalname,
+        mimeType: req.file.mimetype,
+        size: req.file.size,
+        project: projectId,
+        uploadedBy: req.user._id,
+        cloudinaryPublicId: uploadedAsset.public_id,
+        cloudinarySecureUrl: uploadedAsset.secure_url,
+        cloudinaryResourceType: uploadedAsset.resource_type
+      });
+    } catch (error) {
+      try {
+        await deleteAsset(uploadedAsset.public_id, uploadedAsset.resource_type);
+      } catch (cleanupError) {
+        console.error("Cloudinary upload rollback failed", {
+          name: cleanupError.name,
+          httpCode: cleanupError.http_code
+        });
+
+        return res.status(500).json({
+          message: "File upload failed and Cloudinary cleanup was unsuccessful."
+        });
+      }
+
+      throw error;
+    }
+
+    return res.status(201).json({
       message: "File uploaded successfully",
       file
     });
   } catch (error) {
-
-  // Remove uploaded file if database operation fails
-  if (req.file && fs.existsSync(req.file.path)) {
-    fs.unlinkSync(req.file.path);
+    return res.status(500).json({
+      message: error.message
+    });
   }
-
-  res.status(500).json({
-    message: error.message
-  });
-}
 }
 
 // get all files 
@@ -88,7 +116,7 @@ const getAllFiles = async (req, res) => {
       });
     }
 
-    if (!checkProjectAccess(project, req.user._id)) {
+    if (!checkProjectAccess(project, req)) {
       return res.status(403).json({
         message: "You are not allowed to access this project"
       });
@@ -121,7 +149,7 @@ const getFileById = async (req, res) => {
       });
     }
 
-    if (!checkProjectAccess(project, req.user._id)) {
+    if (!checkProjectAccess(project, req)) {
       return res.status(403).json({
         message: "You are not allowed to access this project"
       });
@@ -138,9 +166,32 @@ const getFileById = async (req, res) => {
       });
     }
 
+    if (file.cloudinaryPublicId) {
+      try {
+        const buffer = await downloadAsset({
+          publicId: file.cloudinaryPublicId,
+          resourceType: file.cloudinaryResourceType || "auto",
+          originalName: file.originalName,
+        });
+
+        const contentType = file.mimeType || "application/octet-stream";
+        res.setHeader("Content-Type", contentType);
+        res.setHeader(
+          "Content-Disposition",
+          `attachment; filename="${file.originalName.replace(/"/g, "'")}"`
+        );
+
+        return res.send(Buffer.from(buffer));
+      } catch (downloadError) {
+        return res.status(502).json({
+          message: "File could not be downloaded from Cloudinary."
+        });
+      }
+    }
+
     const fullPath = path.resolve(file.filePath);
 
-    if (!fs.existsSync(fullPath)) {
+    if (!file.filePath || !fs.existsSync(fullPath)) {
       return res.status(404).json({
         message: "File is missing from server storage"
       });
@@ -158,7 +209,13 @@ const getFileById = async (req, res) => {
 const deleteFile = async (req, res) => {
   try {
     const { projectId, fileId } = req.params;
-  
+
+    if (req.inviteSession) {
+      return res.status(403).json({
+        message: "Invited members cannot delete files"
+      });
+    }
+
     const project = await Project.findById(projectId);
 
     if (!project) {
@@ -167,7 +224,7 @@ const deleteFile = async (req, res) => {
       });
     }
 
-    if (!checkProjectAccess(project, req.user._id)) {
+    if (!checkProjectAccess(project, req)) {
       return res.status(403).json({
         message: "You are not allowed to access this project"
       });
@@ -184,20 +241,35 @@ const deleteFile = async (req, res) => {
       });
     }
 
-    const isOwner =project.owner.toString() === req.user._id.toString();
+    const isOwner = project.owner.toString() === req.user._id.toString();
 
-    const isUploader =file.uploadedBy.toString() === req.user._id.toString();
-
-    if (!isOwner && !isUploader) {
+    if (!isOwner) {
       return res.status(403).json({
-        message: "You cannot delete this file"
+        message: "Only the project owner can delete files"
       });
     }
 
-    const fullPath = path.resolve(file.filePath);
+    if (file.cloudinaryPublicId) {
+      try {
+        const cloudinaryResult = await deleteAsset(
+          file.cloudinaryPublicId,
+          file.cloudinaryResourceType || "auto"
+        );
 
-    if (fs.existsSync(fullPath)) {
-      await fs.promises.unlink(fullPath);
+        if (cloudinaryResult?.result === "not found") {
+          // No-op: asset is already absent, but metadata should still be removed.
+        }
+      } catch (cloudinaryError) {
+        return res.status(502).json({
+          message: "Cloudinary file deletion failed. The metadata was not removed."
+        });
+      }
+    } else if (file.filePath) {
+      const fullPath = path.resolve(file.filePath);
+
+      if (fs.existsSync(fullPath)) {
+        await fs.promises.unlink(fullPath);
+      }
     }
 
     await file.deleteOne();
