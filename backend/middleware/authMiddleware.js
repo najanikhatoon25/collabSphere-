@@ -3,6 +3,34 @@ const User = require("../models/User");
 const Project = require("../models/Project");
 
 const protect = async (req, res, next) => {
+  const token = req.cookies.token;
+  let tokenErrorMessage = "Invalid or expired token";
+
+  if (token) {
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const user = await User.findById(decoded.id).select("-password");
+
+      if (user) {
+        req.user = user;
+
+        if (req.cookies.inviteSession) {
+          res.clearCookie("inviteSession", {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "lax"
+          });
+        }
+
+        return next();
+      }
+
+      tokenErrorMessage = "User not found";
+    } catch (error) {
+      tokenErrorMessage = "Invalid or expired token";
+    }
+  }
+
   const inviteSessionToken = req.cookies.inviteSession;
 
   if (inviteSessionToken) {
@@ -42,40 +70,15 @@ const protect = async (req, res, next) => {
     }
   }
 
-  try {
-    // Get token from cookie
-    const token = req.cookies.token;
-
-    // Check token exists or not
-    if (!token) {
-      return res.status(401).json({
-        message: "Not authorized. Please login first."
-      });
-    }
-
-    // Verify token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-    // Find user from database
-    const user = await User.findById(decoded.id).select("-password");
-
-    if (!user) {
-      return res.status(401).json({
-        message: "User not found"
-      });
-    }
-
-    // Attach user to request
-    req.user = user;
-
-    // Move to next middleware or controller
-    next();
-
-  } catch (error) {
+  if (token) {
     return res.status(401).json({
-      message: "Invalid or expired token"
+      message: tokenErrorMessage
     });
   }
+
+  return res.status(401).json({
+    message: "Not authorized. Please login first."
+  });
 };
 
 module.exports = protect;

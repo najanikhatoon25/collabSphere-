@@ -23,7 +23,9 @@ const checkProjectAccess =(project,req) =>{
     }
 
     const userId = req.user._id;
+    // console.log(userId, "userid");
     const isOwner=project.owner.toString()===userId.toString()
+    // console.log(isOwner, "---------");
 
 const isMember = project.members.some(
     (member) =>
@@ -39,6 +41,7 @@ return isOwner || isMember
 const uploadFile = async (req, res) => {
   try {
     const { projectId } = req.params;
+    // console.log(projectId, "projectId..");
 
     if (!req.file) {
       return res.status(400).json({
@@ -47,6 +50,7 @@ const uploadFile = async (req, res) => {
     }
 
     const project = await Project.findById(projectId);
+    // console.log(project, "projectpppp");
 
     if (!project) {
       return res.status(404).json({
@@ -54,7 +58,47 @@ const uploadFile = async (req, res) => {
       });
     }
 
-    if (!checkProjectAccess(project, req)) {
+    const userId = req.user?._id?.toString() || null;
+    const ownerId = project.owner.toString();
+    const isOwner = userId === ownerId;
+    const isMember = project.members.some(
+      (member) =>
+        member.user &&
+        member.user.toString() === userId &&
+        member.status === "accepted"
+    );
+    const hasProjectAccess = checkProjectAccess(project, req);
+
+    if (projectId === "6afac7b171c981d4558d6abe") {
+      console.info("Upload authorization diagnostic", {
+        isOwner,
+        isMember,
+        inviteSessionPresent: Boolean(req.inviteSession),
+        inviteProjectMatches:
+          req.inviteSession?.projectId === project._id.toString(),
+        authorized: hasProjectAccess
+      });
+    }
+
+    if (projectId === "6afa985ecff877343cebe646") {
+      console.info("Upload authorization diagnostic", {
+        projectId: project._id.toString(),
+        userId,
+        ownerId,
+        isOwner,
+        members: project.members.map((member) => ({
+          memberId: member._id.toString(),
+          userId: member.user?.toString() || null,
+          status: member.status
+        })),
+        isMember,
+        inviteSession: Boolean(req.inviteSession),
+        inviteProjectId: req.inviteSession?.projectId || null,
+        authorized: hasProjectAccess
+      });
+    }
+
+    if (!hasProjectAccess) {
       return res.status(403).json({
         message: "You are not allowed to access this project"
       });
@@ -283,6 +327,7 @@ const deleteFile = async (req, res) => {
     });
   }
 };module.exports = {
+  checkProjectAccess,
   uploadFile,
   getAllFiles,
   getFileById,
