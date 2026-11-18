@@ -12,12 +12,26 @@ const aiRoutes = require("./routes/aiRoutes");
 
 
 // middleware
+
+// middleware
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://collab-sphere-6y117ulo8-najanikhatoon25s-projects.vercel.app"
+];
+
 app.use(cors({
-    origin:"http://localhost:5173",
-    credentials:true
-}))
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
+  credentials: true
+}));
+
 app.use(express.json());
-app.use(cookieParser())
+app.use(cookieParser());
 
 // register user routes 
 app.use("/api/auth",authRoutes)  
