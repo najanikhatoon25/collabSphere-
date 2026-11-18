@@ -1,5 +1,8 @@
 const configuredApiUrl =
-  import.meta.env.VITE_API_URL || "https://collabsphere-om4z.onrender.com";
+  import.meta.env.VITE_API_URL ||
+  (import.meta.env.DEV
+    ? "http://localhost:5000/api"
+    : "https://collabsphere-om4z.onrender.com/api");
 
 export const API_URL = configuredApiUrl.replace(/\/+$/, "");
 
